@@ -1,0 +1,5 @@
+zeroconf
+pyautogui
+pyperclip
+pyobjc-core; sys_platform == 'darwin'
+pyobjc-framework-Quartz; sys_platform == 'darwin'

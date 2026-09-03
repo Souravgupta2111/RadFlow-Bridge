@@ -1,0 +1,79 @@
+name: Build and Release Bridge
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name "Radflow-Desktop" --clean ledis_desktop_bridge.py
+          Compress-Archive -Path dist\Radflow-Desktop -DestinationPath Radflow-Desktop-Windows.zip
+          # Also build a single file exe for convenience
+          pyinstaller --noconfirm --onefile --windowed --name "Radflow-Desktop" --clean ledis_desktop_bridge.py
+
+      - name: Build macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name "Radflow Desktop" --clean --hidden-import Quartz --hidden-import Quartz.CoreGraphics ledis_desktop_bridge.py
+          cd dist
+          zip -r ../Radflow-Desktop-Mac.zip "Radflow Desktop.app"
+          cd ..
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-builds-${{ matrix.os }}
+          path: |
+            Radflow-Desktop-Mac.zip
+            dist/Radflow-Desktop.exe
+            Radflow-Desktop-Windows.zip
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/Radflow-Desktop-Mac.zip
+            artifacts/Radflow-Desktop.exe
+            artifacts/Radflow-Desktop-Windows.zip
